@@ -1,0 +1,88 @@
+import numpy as np
+from keras.models import Sequential
+from keras.layers import Dense
+import csv
+import os
+
+#location of files
+files_path_training = "C:\\Users\\Ghost\\VSCODE\\drawings\\training\\"
+
+#list of files
+files = os.listdir(files_path_training)
+
+#store all file data
+data = []
+
+print("Opening Files..")
+#loop through files
+for file in files:
+    with open(files_path_training+file, "r") as file:
+        file_data = file.readlines()
+        #print(np.shape(file_data))
+        data.append(file_data)
+
+#flatten list
+data = [item for sublist in data for item in sublist]
+
+#batch size
+batch_size = 1000
+
+# Create model
+model = Sequential()
+model.add(Dense(64, input_dim=24, activation='relu'))
+model.add(Dense(64, activation='relu'))
+model.add(Dense(20, activation='linear'))
+
+# Compile model
+model.compile(loss='mse', optimizer='adam', metrics=['mse', 'accuracy'])
+
+print("Training model...")
+# Training loop
+for i in range(0, len(data), batch_size):
+    # Get batch data
+    batch_data = data[i:i+batch_size]
+    #print(np.shape(batch_data))
+    # Parse data into a numpy array
+    x_train = np.array([list(map(int, line.strip().split(','))) for line in batch_data])
+    # Extract mean, median, mode and variance
+    means = np.mean(x_train, axis=1)
+    medians = np.median(x_train, axis=1)
+    modes = [np.argmax(np.bincount(x)) for x in x_train]
+    variances = np.var(x_train, axis=1)
+    # Concatenate extracted features with input data
+    x_train = np.column_stack((x_train, means, medians, modes, variances))
+    # Shift the input data to extract y_train values
+    y_train = np.roll(x_train, -20, axis=1)
+    y_train = y_train[:, -20:]
+
+    # Train model
+    model.fit(x_train, y_train, epochs=20, batch_size=32, verbose=1)
+
+#save the model
+print("Saving model...")
+model.save('Keno_Model.h5')
+
+print("Loading test data...")
+#Load new test data
+x_test = np.loadtxt('C:\\Users\\Ghost\\VSCODE\\drawings\\testing\\Really_115.txt', delimiter=',')
+
+# Extract mean, median, mode and variance
+means = np.mean(x_test, axis=1)
+medians = np.median(x_test, axis=1)
+modes = [np.argmax(np.bincount(x.astype(int))) for x in x_test]
+variances = np.var(x_test, axis=1)
+
+# Concatenate extracted features with input data
+x_test = np.column_stack((x_test, means, medians, modes, variances))
+
+# Generate true values
+y_test = np.roll(x_test, -20, axis=1)
+y_test = y_test[:, -20:]
+
+# Generate predictions
+y_pred = model.predict(x_test)
+print("Predictions = {} ".format(str(y_pred)))
+
+#evaluate the model
+scores = model.evaluate(x_test, y_test, verbose=0)
+print("MSE: %.2f, Accuracy: %.2f%%" % (scores[0], scores[2]*100))
