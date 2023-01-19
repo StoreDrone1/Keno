@@ -1,0 +1,115 @@
+#this file loads the keno numbers and appends ongoing files.
+from typing import final
+import bs4 as bs
+import requests
+import datetime as dt
+import numpy as np
+from datetime import timedelta
+import os
+import time as t
+import re
+
+#helper method to convert bytes to Kilobytes
+def get_file_size(file):
+    current_file_size = os.path.getsize(file)
+    return current_file_size
+
+def get_nums():
+    #last known date (2021, 2, 22) - scratch this old tech, but remember 
+    #if we want day by day basis at some point again.
+    #start with beginning of keno on 7-1-09, and get all drawings up until now
+    #.......whenever that is
+    start = dt.datetime(2009, 7, 1)
+    end = dt.datetime.now()
+    delta = dt.timedelta(days=1)
+    knums = []
+    page_max = 0
+    page = 0
+    lost_lines = 0
+
+    #base_path = 'keno_numbers_master_.txt'
+    os.chdir("drawings\\training\\")
+    file_counter = 0
+
+    while start <= end:
+        #next page
+        page += 1
+
+        #based on year range gives us the max pages of drawings for that day
+        #these year ranges are specific to a page max change.  This can be
+        #observed on the Ohio Lottery webpage.
+        #as of 2023 there are still 18 max pages.
+        if start.year == 2009:
+            page_max = 12
+        elif start.year > 2009 & start.year <= 2019:
+            page_max = 16
+        else:
+            page_max = 18    
+
+        #create link to webpage and concat the date / page values
+        link = 'https://www.ohiolottery.com/WinningNumbers/KenoDrawings/KenoDrawingsArchive?date=' + str(start.month) + '%2f' + str(start.day) + '%2f' + str(start.year) + '&page=' + str(page)
+        #get response from lottery website
+        r = requests.get(link)
+
+        #soup to gather the text data
+        soup = bs.BeautifulSoup(r.text, 'xml')
+
+        #find the drawings table 
+        table = soup.find('table', { 'class' : 'keno_drawings' })    
+        
+        try:
+            #fill the list with all table data
+            for row in table.findAll('tr')[1:]:
+                nums = row.findAll('td')
+                #crude, but removes everything we dont need from the list
+                format_nums = str(nums).translate({ord(i): None for i in '[]</td>clasboerfu=",'})
+                #knums.append(format_nums)
+                #attempt hard format of the number array
+                format_nums = format_nums[:-2]
+                if start.year == 2009:
+                    format_nums = format_nums[5:]
+                elif start.year == range(2010, 2019):
+                    format_nums = format_nums[7:]
+                else:
+                    format_nums = format_nums[7:]
+                format_nums = [int(j) for j in format_nums.split()]
+                
+                #use a regular expression to remove all [] from our files
+                try:  
+                    if get_file_size('keno_numbers_master_' + str(file_counter) + '.txt') < 450000:
+                        with open("keno_numbers_master_" + str(file_counter) + ".txt", 'a') as lottery_file:
+                            out = re.sub(r"[\([{})\]]", "", str(format_nums))
+                            line = out.split()
+                            if len(line) != 20 or len(line) == 0:
+                                lost_lines += 1
+                            else:
+                                lottery_file.writelines(str(out) + '\n')
+                    elif get_file_size('keno_numbers_master_' + str(file_counter) + '.txt') >= 450000:
+                        file_counter += 1
+                        with open("keno_numbers_master_" + str(file_counter) + ".txt", 'a') as lottery_file:
+                            out = re.sub(r"[\([{})\]]", "", str(format_nums))
+                            line = out.split()
+                            if len(line) != 20 or len(line) == 0:
+                                lost_lines += 1
+                            else:
+                                lottery_file.writelines(str(out) + '\n')
+
+                except FileNotFoundError:
+                    print("Error")
+               
+        except AttributeError as err:
+            print("Error result - {0}".format(AttributeError))
+            pass
+        #only increment day once all pages have been recorded then reset page to 1
+        if page == page_max:
+           start += delta 
+           page = 1
+
+    print("Lines lost during file creation = {}".format(lost_lines))
+
+    return print("Finished")
+
+print("getting keno numbers...")
+k_results = get_nums()
+print("finished getting numbers")
+
